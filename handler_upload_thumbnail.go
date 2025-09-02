@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxMemory = 10 << 20
-
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
 	videoIDString := r.PathValue("videoID")
 	videoID, err := uuid.Parse(videoIDString)
@@ -34,37 +32,43 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
+	const maxMemory = 10 << 20 // 10 MB
 	err = r.ParseMultipartForm(maxMemory)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Couldn't parse the form data", err)
+		respondWithError(w, http.StatusBadRequest, "Couldn't parse form data", err)
 		return
 	}
 
 	file, header, err := r.FormFile("thumbnail")
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't parse the thumbnail", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse form file", err)
 		return
 	}
+	defer file.Close()
 
-	fileType := header.Header.Get("Content-Type")
-	fileContent, err := io.ReadAll(file)
+	mediaType := header.Header.Get("Content-Type")
+	if mediaType == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type fro thumbnail", nil)
+	}
+
+	data, err := io.ReadAll(file)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't get the contents of the thumbnail", err)
+		respondWithError(w, http.StatusInternalServerError, "Error reading file", err)
 		return
 	}
 
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
-		respondWithError(w, http.StatusNotFound, "Couldn't find the video with the provided ID", err)
+		respondWithError(w, http.StatusNotFound, "Couldn't find video", err)
 		return
 	}
 	if video.UserID != userID {
-		respondWithError(w, http.StatusUnauthorized, "You can't modify that video", nil)
+		respondWithError(w, http.StatusUnauthorized, "Not authorized to update this video", nil)
 	}
 
 	videoThumbnails[videoID] = thumbnail{
-		mediaType: fileType,
-		data:      fileContent,
+		mediaType: mediaType,
+		data:      data,
 	}
 
 	thumbnailURL := (&url.URL{
@@ -77,7 +81,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't update the video", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
 
