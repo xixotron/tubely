@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
-	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -64,29 +61,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	extension := strings.Split(mediaType, "/")[1]
+	assetPath := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 
-	thumbnailFilename := videoIDString + "." + extension
-	thumbnailFile, err := os.Create(path.Join("./assets/", thumbnailFilename))
+	dst, err := os.Create(assetDiskPath)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error creating thumbnail file", err)
+		respondWithError(w, http.StatusInternalServerError, "Unnable to create file on server", err)
 		return
 	}
-	defer thumbnailFile.Close()
+	defer dst.Close()
 
-	_, err = io.Copy(thumbnailFile, file)
+	_, err = io.Copy(dst, file)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error saving thumbnail file", err)
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
 		return
 	}
 
-	thumbnailURL := (&url.URL{
-		Scheme: "http",
-		Host:   r.Host,
-		Path:   "/assets/",
-	}).JoinPath(thumbnailFilename).String()
-
-	video.ThumbnailURL = &thumbnailURL
+	url := cfg.getAssetURL(assetPath)
+	video.ThumbnailURL = &url
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
