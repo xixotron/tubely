@@ -82,7 +82,7 @@ func main() {
 
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(s3Region))
 	if err != nil {
-		log.Fatal("Error loading AWS config")
+		log.Fatalf("Error loading AWS config: %v\n", err)
 	}
 
 	s3Client := s3.NewFromConfig(awsCfg)
