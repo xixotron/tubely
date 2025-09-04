@@ -67,9 +67,8 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoFile := getAssetPath(mediaType)
-
-	tempFile, err := os.CreateTemp("", videoFile)
+	objName := getAssetPath(mediaType)
+	tempFile, err := os.CreateTemp("", objName)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create temp file", err)
 		return
@@ -79,12 +78,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	if _, err := io.Copy(tempFile, file); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not save file to disk", err)
-		return
-	}
-
-	_, err = tempFile.Seek(0, io.SeekStart)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't reset file pointer", err)
 		return
 	}
 
@@ -102,13 +95,26 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	default:
 		prefix = "other"
 	}
+	key := path.Join(prefix, objName)
 
-	key := path.Join(prefix, videoFile)
+	processedFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error processing video", err)
+		return
+	}
+	defer os.Remove(processedFilePath)
+
+	processedFile, err := os.Open(processedFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open processed file", err)
+		return
+	}
+	defer processedFile.Close()
 
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(key),
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	})
 	if err != nil {
@@ -116,7 +122,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	url := cfg.getObjectURL(videoFile)
+	url := cfg.getObjectURL(key)
 	videoMD.VideoURL = &url
 
 	fmt.Println("Video uploaded to", url)
