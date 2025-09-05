@@ -37,12 +37,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoMD, err := cfg.db.GetVideo(videoID)
+	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Couldn't find video", err)
 		return
 	}
-	if videoMD.UserID != userID {
+	if video.UserID != userID {
 		respondWithError(w, http.StatusUnauthorized, "Not authorized to update this video", nil)
 		return
 	}
@@ -122,19 +122,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	url := fmt.Sprintf("%s,%s", cfg.s3Bucket, key)
-	videoMD.VideoURL = &url
+	url := cfg.getObjectDistributionURL(key)
+	video.VideoURL = &url
 
 	fmt.Println("Video uploaded to", url)
-	err = cfg.db.UpdateVideo(videoMD)
+	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
-	}
-
-	video, err := cfg.dbVideoToSignedVideo(videoMD)
-	if err != nil {
-		respondWithError(w, http.StatusFailedDependency, "Coudn't get presigned URL", err)
 	}
 
 	respondWithJSON(w, http.StatusOK, video)

@@ -98,10 +98,5 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	video, err = cfg.dbVideoToSignedVideo(video)
-	if err != nil {
-		respondWithError(w, http.StatusFailedDependency, "Coudn't get presigned URL", err)
-	}
-
 	respondWithJSON(w, http.StatusOK, video)
 }
